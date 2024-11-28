@@ -93,7 +93,8 @@
     )
 )
 
-;; Private Functions
+
+;; Enhanced Private Functions
 (define-private (is-contract-owner)
     (is-eq tx-sender contract-owner)
 )
@@ -105,30 +106,36 @@
     )
 )
 
-;; Public Functions
-(define-public (register-stakeholder (role (string-ascii 20)))
-    (let (
-        (caller tx-sender)
+(define-private (update-reputation (address principal) (change int))
+    (match (map-get? Stakeholders address)
+        stakeholder 
+        (let ((new-score (+ (get reputation-score stakeholder) change)))
+            (map-set Stakeholders
+                address
+                (merge stakeholder { reputation-score: new-score })
+            )
+            (ok new-score)
+        )
+        err-not-found
     )
-    (asserts! (is-contract-owner) err-owner-only)
-    (asserts! (is-none (map-get? Stakeholders caller)) err-already-registered)
-    
-    (ok (map-set Stakeholders
-        caller
-        {
-            role: role,
-            status: "active",
-            joined-at: block-height
-        }
-    ))))
+)
 
-(define-public (invest (amount uint) (terms (string-ascii 50)))
+;; New: Investment Withdrawal Logic
+(define-public (request-withdrawal (amount uint))
     (let (
         (caller tx-sender)
+        (investment (unwrap! (map-get? Investments caller) err-not-found))
+        (current-block block-height)
     )
     (asserts! (> amount u0) err-invalid-amount)
     (asserts! (is-authorized-role caller "investor") err-unauthorized)
+    (asserts! (>= current-block (get withdrawal-locked-until investment)) err-withdrawal-locked)
+    (asserts! (<= amount (get amount investment)) err-invalid-amount)
     
+    ;; Check if performance thresholds are met
+    (asserts! (>= (get-program-performance) (get performance-threshold investment)) err-invalid-state)
+    
+    ;; Update investment amount and log event
     (map-set Investments
         caller
         {
