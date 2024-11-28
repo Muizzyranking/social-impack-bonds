@@ -74,6 +74,24 @@
 (define-data-var current-payment-id uint u0)
 (define-data-var program-status (string-ascii 10) "active")
 (define-data-var total-invested uint u0)
+(define-data-var required-verifications uint u3)  ;; New: Minimum verifications needed
+
+;; Event Logging
+(define-private (log-event (event-type (string-ascii 20)) (data (string-ascii 100)))
+    (let ((event-id (+ (var-get event-counter) u1)))
+        (map-set Events
+            event-id
+            {
+                event-type: event-type,
+                data: data,
+                timestamp: block-height,
+                triggered-by: tx-sender
+            }
+        )
+        (var-set event-counter event-id)
+        event-id
+    )
+)
 
 ;; Private Functions
 (define-private (is-contract-owner)
