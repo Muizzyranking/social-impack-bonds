@@ -108,9 +108,9 @@
             {
                 event-type: event-type,
                 data: data,
-                timestamp: (unwrap-panic (get-block-height)),
+                timestamp: burn-block-height,
                 triggered-by: tx-sender,
-                block: (unwrap-panic (get-block-height))
+                block: burn-block-height
             }
         )
         (var-set event-counter event-id)
@@ -146,7 +146,7 @@
     (let
         (
             (caller tx-sender)
-            (current-block (unwrap-panic (get-block-height)))
+            (current-block burn-block-height)
         )
         (asserts! (is-eq (var-get program-status) "active") err-inactive)
         (asserts! (>= amount min-investment) err-min-investment)
@@ -182,7 +182,7 @@
     (let (
         (caller tx-sender)
         (outcome (unwrap! (map-get? Outcomes outcome-id) err-not-found))
-        (current-block (unwrap-panic (get-block-height)))
+        (current-block burn-block-height)
     )
         (asserts! (is-authorized caller "evaluator") err-unauthorized)
         (asserts! (<= current-block (get verification-deadline outcome)) err-invalid-state)
@@ -190,7 +190,11 @@
         (asserts! (not (is-some (index-of (get verifiers outcome) caller))) err-already-registered)
         
         (let (
-            (new-verifiers (unwrap! (as-max-len? (append (get verifiers outcome) caller) max-verifiers) err-invalid-state))
+            ;; (new-verifiers (unwrap! (as-max-len? (append (get verifiers outcome) caller) max-verifiers) err-invalid-state))
+            (new-verifiers (if (< (len (get verifiers outcome)) max-verifiers)
+                               (unwrap! (as-max-len? (append (get verifiers outcome) caller) max-verifiers) err-invalid-state)
+                               (unwrap! none err-max-capacity)
+            ))
             (new-count (+ (get verification-count outcome) u1))
             (new-confidence (/ (+ (* (get confidence-score outcome) (get verification-count outcome)) confidence) new-count))
             (impact-score (calculate-impact-score achieved-value (get target outcome)))
@@ -237,7 +241,7 @@
                 (merge stakeholder { 
                     reputation-score: new-score,
                     total-transactions: new-transactions,
-                    last-active: (unwrap-panic (get-block-height))
+                    last-active: burn-block-height
                 })
             )
             (ok new-score)
@@ -251,7 +255,7 @@
     (let (
         (caller tx-sender)
         (investment (unwrap! (map-get? Investments caller) err-not-found))
-        (current-block (unwrap-panic (get-block-height)))
+        (current-block burn-block-height)
     )
         (asserts! (is-authorized caller "investor") err-unauthorized)
         (asserts! (>= current-block (get withdrawal-locked-until investment)) err-withdrawal-locked)
@@ -381,7 +385,7 @@
     (role (string-ascii 20))
 )
     (let (
-        (current-block (unwrap-panic (get-block-height)))
+        (current-block burn-block-height)
     )
         (asserts! (is-contract-owner) err-owner-only)
         (asserts! (is-none (map-get? Stakeholders address)) err-already-registered)
@@ -447,4 +451,9 @@
         (log-event "emergency" "program-paused")
         (ok true)
     )
+)
+
+;; Contract owner check
+(define-private (is-contract-owner)
+    (is-eq tx-sender contract-owner)
 )
