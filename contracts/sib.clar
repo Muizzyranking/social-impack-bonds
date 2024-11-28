@@ -1,4 +1,4 @@
-;; Social Impact Bond Smart Contract v2.0
+;; Social Impact Bond Smart Contract
 ;; Enhanced security and features implementation
 
 ;; Constants
