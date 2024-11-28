@@ -127,7 +127,6 @@
         (investment (unwrap! (map-get? Investments caller) err-not-found))
         (current-block block-height)
     )
-    (asserts! (> amount u0) err-invalid-amount)
     (asserts! (is-authorized-role caller "investor") err-unauthorized)
     (asserts! (>= current-block (get withdrawal-locked-until investment)) err-withdrawal-locked)
     (asserts! (<= amount (get amount investment)) err-invalid-amount)
@@ -138,99 +137,81 @@
     ;; Update investment amount and log event
     (map-set Investments
         caller
-        {
-            amount: amount,
-            committed-at: block-height,
-            terms: terms,
-            status: "active"
-        }
+        (merge investment {
+            amount: (- (get amount investment) amount),
+            status: (if (is-eq amount (get amount investment)) "withdrawn" "partial")
+        })
     )
-    (var-set total-invested (+ (var-get total-invested) amount))
+    
+    (var-set total-invested (- (var-get total-invested) amount))
+    (log-event "withdrawal" "funds-withdrawn")
     (ok true)))
 
-(define-public (report-outcome 
-    (metric (string-ascii 50))
-    (target uint)
-    (achieved uint)
-)
-    (let (
-        (caller tx-sender)
-        (outcome-id (+ (var-get current-outcome-id) u1))
-    )
-    (asserts! (is-authorized-role caller "evaluator") err-unauthorized)
-    
-    (map-set Outcomes
-        outcome-id
-        {
-            metric: metric,
-            target: target,
-            achieved: achieved,
-            verified: false,
-            evaluator: caller
-        }
-    )
-    (var-set current-outcome-id outcome-id)
-    (ok outcome-id)))
-
-(define-public (verify-outcome (outcome-id uint))
+;; Enhanced Outcome Verification
+(define-public (verify-outcome-enhanced (outcome-id uint) (confidence uint))
     (let (
         (caller tx-sender)
         (outcome (unwrap! (map-get? Outcomes outcome-id) err-not-found))
     )
     (asserts! (is-authorized-role caller "evaluator") err-unauthorized)
-    (asserts! (not (get verified outcome)) err-already-registered)
+    (asserts! (< (get verification-count outcome) (var-get required-verifications)) err-already-registered)
+    (asserts! (not (is-some (index-of (get verifiers outcome) caller))) err-already-registered)
     
-    (map-set Outcomes
-        outcome-id
-        (merge outcome { verified: true })
-    )
-    (ok true)))
-
-(define-public (schedule-payment 
-    (amount uint)
-    (due-date uint)
-    (recipient principal)
-)
     (let (
-        (caller tx-sender)
-        (payment-id (+ (var-get current-payment-id) u1))
+        (new-verifiers (unwrap! (as-max-len? (append (get verifiers outcome) caller) u5) err-invalid-state))
+        (new-count (+ (get verification-count outcome) u1))
+        (new-confidence (/ (+ (* (get confidence-score outcome) (get verification-count outcome)) confidence) new-count))
     )
-    (asserts! (is-contract-owner) err-owner-only)
-    
-    (map-set PaymentSchedule
-        payment-id
-        {
-            amount: amount,
-            due-date: due-date,
-            status: "pending",
-            recipient: recipient
-        }
+        
+        (map-set Outcomes
+            outcome-id
+            (merge outcome {
+                verification-count: new-count,
+                verifiers: new-verifiers,
+                confidence-score: new-confidence,
+                verified: (>= new-count (var-get required-verifications))
+            })
+        )
+        
+        ;; Update evaluator reputation based on consensus
+        (if (>= new-count (var-get required-verifications))
+            (update-reputation caller u1)
+            true
+        )
+        
+        (log-event "verification" "outcome-verified")
+        (ok true)
+    ))
+)
+
+
+;; Read-only Functions for Events
+(define-read-only (get-event (event-id uint))
+    (map-get? Events event-id)
+)
+
+(define-read-only (get-latest-events (count uint))
+    (let ((latest-id (var-get event-counter)))
+        (list 
+            (get-event latest-id)
+            (get-event (- latest-id u1))
+            (get-event (- latest-id u2))
+        )
     )
-    (var-set current-payment-id payment-id)
-    (ok payment-id)))
-
-;; Read-only Functions
-(define-read-only (get-stakeholder (address principal))
-    (map-get? Stakeholders address)
 )
 
-(define-read-only (get-investment (investor principal))
-    (map-get? Investments investor)
+;; New: Performance Calculation
+(define-read-only (get-program-performance)
+    (let ((total-outcomes (var-get current-outcome-id)))
+        (fold check-outcome-performance u0 (list u1 u2 u3 u4 u5))
+    )
 )
 
-(define-read-only (get-outcome (outcome-id uint))
-    (map-get? Outcomes outcome-id)
-)
-
-(define-read-only (get-payment (payment-id uint))
-    (map-get? PaymentSchedule payment-id)
-)
-
-(define-read-only (get-program-stats)
-    {
-        total-invested: (var-get total-invested),
-        outcomes-reported: (var-get current-outcome-id),
-        payments-scheduled: (var-get current-payment-id),
-        status: (var-get program-status)
-    }
+(define-private (check-outcome-performance (id uint) (current-performance uint))
+    (match (map-get? Outcomes id)
+        outcome (if (and (get verified outcome) (>= (get achieved outcome) (get target outcome)))
+                   (+ current-performance u20)
+                   current-performance)
+        current-performance
+    )
 )
