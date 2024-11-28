@@ -8,6 +8,21 @@
 (define-constant err-already-registered (err u102))
 (define-constant err-invalid-amount (err u103))
 (define-constant err-unauthorized (err u104))
+(define-constant err-invalid-state (err u105))
+(define-constant err-withdrawal-locked (err u106))
+
+;; Events
+(define-data-var event-counter uint u0)
+
+(define-map Events
+    uint
+    {
+        event-type: (string-ascii 20),
+        data: (string-ascii 100),
+        timestamp: uint,
+        triggered-by: principal
+    }
+)
 
 ;; Data Maps
 (define-map Stakeholders
