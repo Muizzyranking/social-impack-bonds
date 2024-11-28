@@ -28,9 +28,10 @@
 (define-map Stakeholders
     principal
     {
-        role: (string-ascii 20),           ;; investor, provider, evaluator, outcome-payer
-        status: (string-ascii 10),         ;; active, inactive
-        joined-at: uint
+        role: (string-ascii 20),           
+        status: (string-ascii 10),         
+        joined-at: uint,
+        reputation-score: uint             ;; New: Added reputation tracking
     }
 )
 
@@ -39,31 +40,34 @@
     {
         amount: uint,
         committed-at: uint,
-        terms: (string-ascii 50),          ;; investment terms hash (IPFS)
-        status: (string-ascii 10)          ;; active, repaid, defaulted
+        terms: (string-ascii 50),          
+        status: (string-ascii 10),
+        withdrawal-locked-until: uint,     ;; New: Added withdrawal lock period
+        performance-threshold: uint        ;; New: Added performance requirement
     }
 )
 
 (define-map Outcomes
     uint
     {
-        metric: (string-ascii 50),         ;; metric description
-        target: uint,                      ;; target value
-        achieved: uint,                    ;; achieved value
-        verified: bool,                    ;; verification status
-        evaluator: principal              ;; evaluator who verified
+        metric: (string-ascii 50),         
+        target: uint,                      
+        achieved: uint,                    
+        verified: bool,                    
+        evaluator: principal,
+        verification-count: uint,          ;; New: Multiple verifications required
+        verifiers: (list 5 principal),     ;; New: List of verifiers
+        confidence-score: uint            ;; New: Verification confidence
     }
 )
 
-(define-map PaymentSchedule
-    uint
-    {
-        amount: uint,
-        due-date: uint,
-        status: (string-ascii 10),         ;; pending, paid, defaulted
-        recipient: principal
-    }
-)
+(define-map PaymentSchedule uint {
+    amount: uint,
+    due-date: uint,
+    status: (string-ascii 10),
+    recipient: principal,
+    outcome-dependency: uint              ;; New: Link payment to specific outcome
+})
 
 ;; Data Variables
 (define-data-var current-outcome-id uint u0)
